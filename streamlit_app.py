@@ -1,167 +1,214 @@
 import streamlit as st
-from email_validator import validate_email, EmailNotValidError
-import dns.resolver
-import smtplib
-import socket
 import pandas as pd
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import psutil
-import time
+import google.generativeai as genai
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from datetime import datetime
 import os
-import re
-import random
-import datetime
-from typing import List
+import logging
+import matplotlib.pyplot as plt
 
-# Function to check email validity
-def validate_email_address(email, blacklist, custom_sender="test@example.com"):
-    """Enhanced email validation with DNS, SMTP, and blacklist checks."""
-    try:
-        validate_email(email)
-    except EmailNotValidError as e:
-        return email, "Invalid", f"Invalid syntax: {str(e)}"
+# Configure the API key securely from Streamlit's secrets
+genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+
+# Email configuration
+SMTP_SERVER = 'smtp.yourmailserver.com'
+SMTP_PORT = 587
+EMAIL_SENDER = 'your_email@example.com'
+EMAIL_PASSWORD = st.secrets["EMAIL_PASSWORD"]  # Store email password securely in Streamlit secrets
+
+# Configure logging
+log_filename = "sales_proposals.log"
+logging.basicConfig(filename=log_filename, level=logging.INFO)
+
+# Streamlit App UI
+st.title("Automated Sales Proposal Generator")
+st.write("Upload your leads' CSV, personalize proposals using AI, and send emails automatically.")
+
+# Upload CSV file
+uploaded_file = st.file_uploader("Upload CSV with Lead Data", type=["csv", "xlsx"])
+if uploaded_file is not None:
+    # Load CSV data
+    df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
+    st.write("Preview of the data:")
+    st.write(df.head())
+
+    # Ensure correct columns are present
+    required_columns = ['Lead Name', 'Interested Product', 'Price Range', 'Email Address']
+    if not all(col in df.columns for col in required_columns):
+        st.error(f"CSV file must contain the following columns: {', '.join(required_columns)}")
+
+    # Button to generate personalized proposals
+    if st.button("Generate Proposals"):
+        # Process each lead and create a personalized email
+        responses = []
+        for _, row in df.iterrows():
+            lead_name = row['Lead Name']
+            product = row['Interested Product']
+            budget = row['Price Range']
+            email = row['Email Address']
+            
+            prompt = f"Create a personalized sales proposal for {lead_name}, who is interested in {product} within a budget of {budget}. Make the proposal professional and tailored."
+            
+            try:
+                # Generate proposal using AI model
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                response = model.generate_content(prompt)
+                proposal = response.text
+                responses.append((lead_name, email, proposal))
+                
+                # Log the proposal creation
+                logging.info(f"{datetime.now()} - Generated proposal for {lead_name}: {proposal[:100]}...")
+
+            except Exception as e:
+                st.error(f"Error generating proposal for {lead_name}: {e}")
+                logging.error(f"{datetime.now()} - Error generating proposal for {lead_name}: {e}")
+
+        # Display AI-generated proposals
+        st.write("Generated Proposals:")
+        for lead_name, email, proposal in responses:
+            st.write(f"Proposal for {lead_name} ({email}):")
+            st.write(proposal)
+            st.text_area(f"Proposal for {lead_name}", proposal, height=200)
+
+        # Send proposals via email
+        if st.button("Send Emails"):
+            for lead_name, email, proposal in responses:
+                try:
+                    send_email(email, lead_name, proposal)
+                    st.success(f"Email sent to {lead_name} at {email}")
+                    logging.info(f"{datetime.now()} - Email sent to {lead_name} at {email}")
+                except Exception as e:
+                    st.error(f"Failed to send email to {lead_name}: {e}")
+                    logging.error(f"{datetime.now()} - Failed to send email to {lead_name}: {e}")
+
+        # Save generated proposals to a CSV file for record-keeping
+        if st.button("Download Generated Proposals"):
+            output_df = pd.DataFrame(responses, columns=['Lead Name', 'Email Address', 'Proposal'])
+            output_df.to_csv("generated_proposals.csv", index=False)
+            st.download_button("Download CSV", "generated_proposals.csv", "generated_proposals.csv")
+
+        # Provide an option to send a test email
+        if st.button("Send Test Email"):
+            send_email("test@example.com", "Test User", "This is a test email. If you received this, the email system is working!")
+            st.success("Test email sent successfully!")
+
+# Function to send email
+def send_email(to_email, lead_name, proposal):
+    # Create the email message
+    subject = f"Personalized Proposal for {lead_name}"
+    body = f"Dear {lead_name},\n\n{proposal}\n\nBest regards,\nYour Company Name"
     
-    domain = email.split("@")[-1]
-    if domain in blacklist:
-        return email, "Blacklisted", "Domain is blacklisted."
-
+    # Set up the MIME
+    message = MIMEMultipart()
+    message["From"] = EMAIL_SENDER
+    message["To"] = to_email
+    message["Subject"] = subject
+    message.attach(MIMEText(body, "plain"))
+    
+    # Connect to the SMTP server and send email
     try:
-        mx_records = dns.resolver.resolve(domain, "MX")
-    except dns.resolver.NXDOMAIN:
-        return email, "Invalid", "Domain does not exist."
-    except dns.resolver.Timeout:
-        return email, "Invalid", "DNS query timed out."
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.starttls()  # Start TLS encryption
+            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+            server.sendmail(EMAIL_SENDER, to_email, message.as_string())
+            server.quit()
+            logging.info(f"{datetime.now()} - Successfully sent email to {to_email}")
     except Exception as e:
-        return email, "Invalid", f"DNS error: {str(e)}"
+        logging.error(f"{datetime.now()} - Error sending email to {to_email}: {e}")
+        raise Exception(f"Error sending email to {to_email}: {e}")
 
-    try:
-        mx_host = str(mx_records[0].exchange).rstrip(".")
-        smtp = smtplib.SMTP(mx_host, timeout=10)
-        smtp.helo()
-        smtp.mail(custom_sender)
-        code, _ = smtp.rcpt(email)
-        smtp.quit()
-        if code == 250:
-            return email, "Valid", "Email exists and is reachable."
-        elif code == 550:
-            return email, "Invalid", "Mailbox does not exist."
-        elif code == 451:
-            return email, "Greylisted", "Temporary error, try again later."
-        else:
-            return email, "Invalid", f"SMTP response code {code}."
-    except smtplib.SMTPConnectError:
-        return email, "Invalid", "SMTP connection failed."
-    except Exception as e:
-        return email, "Invalid", f"SMTP error: {str(e)}"
+# Add extra functionality to generate a report based on lead data
+if st.button("Generate Lead Report"):
+    lead_report = f"Total Leads: {len(df)}\n"
+    lead_report += f"Leads Interested in High Budget: {len(df[df['Price Range'].apply(lambda x: float(x.replace('$', '').replace(',', '').strip()) > 50000)])}\n"
+    lead_report += f"Leads Interested in Mid Budget: {len(df[df['Price Range'].apply(lambda x: float(x.replace('$', '').replace(',', '').strip()) between 20000 and 50000)])}\n"
+    lead_report += f"Leads Interested in Low Budget: {len(df[df['Price Range'].apply(lambda x: float(x.replace('$', '').replace(',', '').strip()) < 20000)])}\n"
+    
+    st.write("Lead Report:")
+    st.write(lead_report)
 
-    return email, "Invalid", "Unknown error."
+# Option to analyze lead conversion rate based on proposal effectiveness
+if st.button("Analyze Lead Conversion"):
+    # Simulating conversion rate analysis for demonstration purposes
+    conversion_rate = (len(df[df['Interested Product'].str.contains('premium', case=False)]) / len(df)) * 100
+    st.write(f"Estimated Lead Conversion Rate: {conversion_rate:.2f}%")
 
-# Function to generate random email addresses
-def generate_random_email() -> str:
-    domains = ["gmail.com", "yahoo.com", "outlook.com", "example.com", "test.com"]
-    username = ''.join(random.choices("abcdefghijklmnopqrstuvwxyz0123456789", k=10))
-    domain = random.choice(domains)
-    return f"{username}@{domain}"
+# Option to apply custom filters to leads
+filters = st.selectbox("Filter Leads by Budget", options=["All", "High Budget", "Mid Budget", "Low Budget"])
 
-# Function to check the email format
-def is_valid_email_format(email: str) -> bool:
-    regex = r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
-    return re.match(regex, email) is not None
+if filters == "High Budget":
+    filtered_leads = df[df['Price Range'].apply(lambda x: float(x.replace('$', '').replace(',', '').strip()) > 50000)]
+elif filters == "Mid Budget":
+    filtered_leads = df[df['Price Range'].apply(lambda x: 20000 <= float(x.replace('$', '').replace(',', '').strip()) <= 50000)]
+elif filters == "Low Budget":
+    filtered_leads = df[df['Price Range'].apply(lambda x: float(x.replace('$', '').replace(',', '').strip()) < 20000)]
+else:
+    filtered_leads = df
 
-# Streamlit App
-st.title("Inboxify by EverTech")
+st.write("Filtered Leads:")
+st.write(filtered_leads)
 
-# Resource utilization stats - live update
-cpu_metric = st.empty()
-ram_metric = st.empty()
-bandwidth_metric = st.empty()
+# Option to store proposals in a database (simulate with a simple file-based storage)
+if st.button("Store Proposals in Database"):
+    if not os.path.exists('proposals_db'):
+        os.mkdir('proposals_db')
+    for lead_name, email, proposal in responses:
+        with open(f"proposals_db/{lead_name}_{email}.txt", 'w') as f:
+            f.write(proposal)
+    st.success("Proposals stored successfully in database.")
 
-# Blacklist upload
-blacklist_file = st.file_uploader("Upload a blacklist file (optional)", type=["txt"])
-blacklist = set()
-if blacklist_file:
-    blacklist = set(line.strip() for line in blacklist_file.read().decode("utf-8").splitlines())
-    st.write(f"Loaded {len(blacklist)} blacklisted domains.")
+# Option to generate and visualize a dashboard with lead statistics
+if st.button("Generate Dashboard"):
+    # Placeholder code for a simple dashboard showing lead stats
+    st.write("Dashboard:")
+    st.write(f"Total Leads: {len(df)}")
+    st.write(f"Leads Interested in Product A: {len(df[df['Interested Product'] == 'Product A'])}")
+    st.write(f"Leads Interested in Product B: {len(df[df['Interested Product'] == 'Product B'])}")
 
-# File upload
-uploaded_file = st.file_uploader("Upload a .txt file with emails", type=["txt"])
-if uploaded_file:
-    emails = uploaded_file.read().decode("utf-8").splitlines()
-    st.write(f"Processing {len(emails)} emails...")
+    # Plotting a bar chart of leads per product
+    product_counts = df['Interested Product'].value_counts()
+    st.write("Leads per Product:")
+    st.bar_chart(product_counts)
 
-    # Process emails in chunks
-    chunk_size = 1000
-    results = []
-    progress = st.progress(0)
+# Provide option to generate AI-based follow-up email
+if st.button("Generate Follow-Up Email"):
+    follow_up_email = "Hi {lead_name},\n\nWe just wanted to follow up on our previous proposal for {product}. Please let us know if you have any questions.\n\nBest regards,\nYour Company"
+    st.write("Follow-up Email Template:")
+    st.write(follow_up_email)
 
-    with ThreadPoolExecutor(max_workers=20) as executor:
-        for i in range(0, len(emails), chunk_size):
-            chunk = emails[i:i + chunk_size]
-            futures = [executor.submit(validate_email_address, email.strip(), blacklist) for email in chunk if email.strip()]
-            for idx, future in enumerate(as_completed(futures)):
-                results.append(future.result())
-                if idx % 100 == 0:
-                    progress.progress(len(results) / len(emails))
+# Option to summarize lead data
+if st.button("Summarize Lead Data"):
+    summary = df.describe()
+    st.write("Lead Data Summary:")
+    st.write(summary)
 
-    # Display results
-    df = pd.DataFrame(results, columns=["Email", "Status", "Message"])
-    st.dataframe(df)
+# Option to visualize lead distribution by budget range
+if st.button("Visualize Lead Budget Distribution"):
+    df['Budget Range'] = df['Price Range'].apply(lambda x: 'High' if float(x.replace('$', '').replace(',', '').strip()) > 50000 else 'Mid' if float(x.replace('$', '').replace(',', '').strip()) >= 20000 else 'Low')
+    budget_distribution = df['Budget Range'].value_counts()
+    st.write("Lead Budget Distribution:")
+    st.bar_chart(budget_distribution)
 
-    # Summary report
-    st.write("### Summary Report")
-    st.write(f"Total Emails: {len(emails)}")
-    for status in ["Valid", "Invalid", "Greylisted", "Blacklisted"]:
-        count = df[df["Status"] == status].shape[0]
-        st.write(f"{status} Emails: {count}")
+# Option to show detailed lead profile
+if st.button("Show Detailed Lead Profile"):
+    lead_name = st.text_input("Enter Lead Name for Profile")
+    if lead_name:
+        lead_profile = df[df['Lead Name'].str.contains(lead_name, case=False)]
+        st.write("Lead Profile:")
+        st.write(lead_profile)
 
-    # Export results
-    csv = df.to_csv(index=False)
-    st.download_button("Download Results", data=csv, file_name="email_validation_results.csv", mime="text/csv")
+# Option to show email templates with variables
+if st.button("Show Email Templates"):
+    email_templates = {
+        "Initial Proposal": "Dear {lead_name},\n\nThank you for showing interest in our {product}. We have prepared a tailored proposal for you based on your budget of {budget}.\n\nBest regards,\nYour Company",
+        "Follow-Up": "Hi {lead_name},\n\nJust wanted to follow up on our proposal for {product}. Let me know if you need any additional information.\n\nBest regards,\nYour Company"
+    }
+    st.write("Email Templates:")
+    st.write(email_templates)
 
-# Live resource update every second
-while True:
-    # Get resource utilization stats
-    cpu_usage = psutil.cpu_percent(interval=1)
-    ram_usage = psutil.virtual_memory().percent
-    net_io = psutil.net_io_counters()
-    bandwidth_usage = (net_io.bytes_sent + net_io.bytes_recv) / (1024 ** 2)  # in MB
-
-    # Update live metrics on Streamlit app
-    cpu_metric.metric("CPU Usage (%)", cpu_usage)
-    ram_metric.metric("RAM Usage (%)", ram_usage)
-    bandwidth_metric.metric("Bandwidth Usage (MB)", bandwidth_usage)
-
-    # Wait before updating again
-    time.sleep(1)
-
-# Additional features
-def system_info():
-    """Returns system information like OS, CPU, RAM, Disk Space."""
-    os_info = os.uname()
-    cpu_count = psutil.cpu_count()
-    disk_space = psutil.disk_usage('/')
-    return f"OS: {os_info.system} {os_info.release}, CPU: {cpu_count} cores, Disk: {disk_space.percent}% used"
-
-def get_current_time():
-    """Returns the current time and date."""
-    return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-def random_email_statistics(emails: List[str]):
-    """Generate statistics about random emails."""
-    valid_count = sum(1 for email in emails if is_valid_email_format(email))
-    invalid_count = len(emails) - valid_count
-    return valid_count, invalid_count
-
-# Display system info and current time
-st.sidebar.write("### System Info")
-st.sidebar.write(system_info())
-st.sidebar.write(f"Current Time: {get_current_time()}")
-
-# Display random email statistics
-random_emails = [generate_random_email() for _ in range(100)]
-valid_count, invalid_count = random_email_statistics(random_emails)
-st.sidebar.write("### Random Email Statistics")
-st.sidebar.write(f"Valid Emails: {valid_count}")
-st.sidebar.write(f"Invalid Emails: {invalid_count}")
-
-# End of the Streamlit app
+# Option to export filtered leads to CSV
+if st.button("Export Filtered Leads to CSV"):
+    filtered_leads.to_csv("filtered_leads.csv", index=False)
+    st.download_button("Download Filtered Leads CSV", "filtered_leads.csv")
