@@ -15,7 +15,7 @@ SCOPES = ['https://www.googleapis.com/auth/gmail.send']
 CREDS_FILE = 'token.pickle'  # This file stores the credentials
 
 def authenticate_gmail():
-    """Authenticate the user and return Gmail API service using console authentication."""
+    """Authenticate the user and return Gmail API service using manual console authentication."""
     creds = None
 
     # Check if token.pickle exists and contains valid credentials
@@ -28,9 +28,18 @@ def authenticate_gmail():
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
+            # Replace with the appropriate path to your client_secret.json file
             flow = InstalledAppFlow.from_client_secrets_file(
-                'client_secret.json', SCOPES)  # Provide path to your credentials
-            creds = flow.run_console()  # Use console authentication if GUI is not available
+                'client_secret.json', SCOPES)
+
+            # Run console-based authentication
+            print("Please go to this URL: ")
+            auth_url, _ = flow.authorization_url(access_type='offline', include_granted_scopes='true')
+            print(auth_url)
+
+            # Manually authenticate: Visit the URL, get the authorization code, and paste it here.
+            code = input('Enter the authorization code: ')
+            creds = flow.fetch_token(authorization_response=code, client_secret_file='client_secret.json')
 
         # Save the credentials for the next run
         with open(CREDS_FILE, 'wb') as token:
