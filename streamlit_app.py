@@ -28,13 +28,13 @@ def authenticate_gmail():
         else:
             # Run the OAuth flow and obtain credentials
             flow = InstalledAppFlow.from_client_secrets_file(
-                'credentials.json', SCOPES)
-            
-            # Use this for local server authentication (should work with a browser)
+                'client_secret.json', SCOPES)  # Make sure your 'client_secret.json' is available
+
             try:
+                # Use this for local server authentication (should work with a browser)
                 creds = flow.run_local_server(port=0)
             except Exception:
-                # Fallback to console authentication for headless environments
+                # Fallback to console authentication for headless environments (e.g., cloud deployment)
                 creds = flow.run_console()
 
         # Save credentials for the next run
