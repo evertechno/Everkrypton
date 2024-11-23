@@ -1,5 +1,6 @@
 import smtplib
 import streamlit as st
+import pandas as pd
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import google.generativeai as genai
@@ -60,26 +61,37 @@ def generate_sales_proposal(customer_name, product_name, product_details, custom
 
 # Streamlit App UI
 st.title("Generate and Send Personalized Sales Proposal")
-st.write("Use AI to generate personalized sales proposals based on customer information.")
+st.write("Upload a CSV file with customer details to generate and send personalized proposals.")
 
-# Inputs for customer details
-customer_name = st.text_input("Customer Name")
-product_name = st.text_input("Product Name")
-product_details = st.text_area("Product Details")
-customer_needs = st.text_area("Customer Needs")
+# File upload for CSV
+uploaded_file = st.file_uploader("Upload your CSV file", type="csv")
 
-# Button to generate and send proposal
-if st.button("Generate Proposal and Send Email"):
-    if customer_name and product_name and product_details and customer_needs:
+# Check if the file is uploaded and is in CSV format
+if uploaded_file is not None:
+    # Read the CSV file into a DataFrame
+    df = pd.read_csv(uploaded_file)
+
+    # Display the uploaded data (for verification)
+    st.write("Uploaded CSV Data:")
+    st.dataframe(df)
+
+    # Process each row in the CSV to generate and send proposals
+    for index, row in df.iterrows():
+        customer_name = row['Name']
+        recipient_email = row['Email']
+        product_name = row['Product']
+        product_details = row['Product Details']
+        customer_needs = row['Customer Needs']
+        
         # Generate the sales proposal using AI
         proposal = generate_sales_proposal(customer_name, product_name, product_details, customer_needs)
         
         if proposal:
-            # Email inputs
-            recipient_email = st.text_input("Recipient Email")
+            # Subject for the email
             subject = f"Personalized Sales Proposal for {customer_name}"
             
-            # Send the email with the generated proposal
+            # Send the proposal via email
             send_email(recipient_email, subject, proposal)
-    else:
-        st.error("Please fill out all fields to generate the proposal.")
+else:
+    st.info("Please upload a CSV file to continue.")
+
