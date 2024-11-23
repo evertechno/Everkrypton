@@ -5,15 +5,15 @@ import pandas as pd
 import streamlit as st
 from datetime import datetime
 
-# SMTP Credentials and Server Info
-smtp_server = "smtp-relay.brevo.com"
-smtp_port = 587
-sender_email = "7cd1d3001@smtp-brevo.com"  # Your SMTP email address
-sender_password = "your_smtp_key"  # Your SMTP key (Master Password)
-
 # Streamlit App UI
 st.title("Automated Sales Proposal Generator")
 st.write("Upload your leads' CSV, personalize proposals, and send emails automatically via SMTP.")
+
+# Access SMTP credentials from Streamlit secrets
+smtp_server = "smtp-relay.brevo.com"
+smtp_port = 587
+sender_email = st.secrets["smtp"]["username"]  # Retrieve SMTP username from Streamlit secrets
+sender_password = st.secrets["smtp"]["password"]  # Retrieve SMTP key (Master Password) from Streamlit secrets
 
 # Upload CSV file
 uploaded_file = st.file_uploader("Upload CSV with Lead Data", type=["csv", "xlsx"])
