@@ -1,13 +1,8 @@
 import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-import pandas as pd
 import streamlit as st
-from datetime import datetime
-
-# Streamlit App UI
-st.title("Automated Sales Proposal Generator")
-st.write("Upload your leads' CSV, personalize proposals, and send emails automatically via SMTP.")
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import google.generativeai as genai
 
 # Access SMTP credentials from Streamlit secrets
 smtp_server = "smtp-relay.brevo.com"
@@ -15,110 +10,76 @@ smtp_port = 587
 sender_email = st.secrets["smtp"]["username"]  # Retrieve SMTP username from Streamlit secrets
 sender_password = st.secrets["smtp"]["password"]  # Retrieve SMTP key (Master Password) from Streamlit secrets
 
-# Upload CSV file
-uploaded_file = st.file_uploader("Upload CSV with Lead Data", type=["csv", "xlsx"])
-df = None  # Initialize the df variable
+# Configure the Gemini AI API key
+genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
-if uploaded_file is not None:
-    # Load CSV or Excel data
-    if uploaded_file.name.endswith('.csv'):
-        df = pd.read_csv(uploaded_file)
-    else:
-        df = pd.read_excel(uploaded_file)
-
-    st.write("Preview of the data:")
-    st.write(df.head())
-
-    # Ensure required columns are present
-    required_columns = ['Lead Name', 'Interested Product', 'Price Range', 'Email Address', 'Lead Date']
-    if not all(col in df.columns for col in required_columns):
-        st.error(f"CSV file must contain the following columns: {', '.join(required_columns)}")
-
-# Function to send emails
-def send_email(receiver_email, subject, body):
+# Function to send email
+def send_email(to_email, subject, body):
     try:
-        # Create the email
+        # Setup the MIME
         msg = MIMEMultipart()
         msg['From'] = sender_email
-        msg['To'] = receiver_email
+        msg['To'] = to_email
         msg['Subject'] = subject
-
-        # Attach the body with the msg instance
+        
+        # Attach the email body to the email
         msg.attach(MIMEText(body, 'plain'))
-
-        # Set up the server
-        server = smtplib.SMTP(smtp_server, smtp_port)
-        server.starttls()  # Secure the connection
-        server.login(sender_email, sender_password)  # Log in using the SMTP key (Master Password)
-
-        # Send email
-        text = msg.as_string()
-        server.sendmail(sender_email, receiver_email, text)
-        server.quit()
-
-        return True
-    except Exception as e:
-        print(f"Error sending email: {e}")
-        return False
-
-# Process proposals and generate emails if the button is clicked
-if df is not None and st.button("Generate Proposals and Send Emails"):
-    proposals = []
-    for _, row in df.iterrows():
-        lead_name = row['Lead Name']
-        product = row['Interested Product']
-        budget = row['Price Range']
-        email = row['Email Address']
         
-        # Personalized Proposal Generation
-        proposal = f"Dear {lead_name},\n\nWe are excited to offer you a {product} that fits your budget of {budget}. We believe this will be a great addition to your business.\n\nBest regards,\nYour Company Name"
-        
-        # Store the generated proposal for each lead
-        proposals.append({
-            "Lead Name": lead_name,
-            "Email Address": email,
-            "Proposal": proposal
-        })
+        # Connect to the SMTP server and send email
+        with smtplib.SMTP(smtp_server, smtp_port) as server:
+            server.starttls()  # Secure the connection
+            server.login(sender_email, sender_password)  # Login using the stored credentials
+            text = msg.as_string()
+            server.sendmail(sender_email, to_email, text)  # Send the email
 
-        # Send email using SMTP
-        subject = f"Personalized Sales Proposal for {lead_name}"
-        body = f"Dear {lead_name},\n\n{proposal}\n\nBest regards,\nYour Company Name"
-        success = send_email(email, subject, body)
-        
-        if success:
-            st.success(f"Proposal sent to {lead_name} ({email})")
-        else:
-            st.error(f"Failed to send proposal to {lead_name} ({email})")
-
-    st.success("All emails have been sent!")
-
-# Option to download generated proposals
-if df is not None and st.button("Download Generated Proposals"):
-    output_df = df[['Lead Name', 'Email Address', 'Interested Product', 'Price Range']]
-    output_df['Proposal'] = output_df.apply(lambda row: f"Dear {row['Lead Name']},\n\nWe are excited to offer you a {row['Interested Product']} that fits your budget of {row['Price Range']}.\n\nBest regards,\nYour Company Name", axis=1)
+        st.success(f"Email sent successfully to {to_email}")
     
-    output_df.to_csv("generated_proposals.csv", index=False)
-    st.download_button("Download Proposals", "generated_proposals.csv", "generated_proposals.csv")
+    except Exception as e:
+        st.error(f"Error sending email: {e}")
 
-# Function to filter leads by budget
-if df is not None:
-    filters = st.selectbox("Filter Leads by Budget", options=["All", "High Budget", "Mid Budget", "Low Budget"])
+# Function to generate a personalized sales proposal using AI
+def generate_sales_proposal(customer_name, product_name, product_details, customer_needs):
+    try:
+        # Define the prompt for AI to generate a sales proposal
+        prompt = f"""
+        Generate a personalized sales proposal for a customer named {customer_name}. 
+        The product is {product_name}, and here are the details: {product_details}. 
+        The customer's needs are: {customer_needs}. 
+        The proposal should be professional, persuasive, and tailored to the customer's needs.
+        """
 
-    if filters == "High Budget":
-        filtered_leads = df[df['Price Range'].apply(lambda x: float(x.replace('$', '').replace(',', '').strip()) > 50000)]
-    elif filters == "Mid Budget":
-        filtered_leads = df[df['Price Range'].apply(lambda x: 20000 <= float(x.replace('$', '').replace(',', '').strip()) <= 50000)]
-    elif filters == "Low Budget":
-        filtered_leads = df[df['Price Range'].apply(lambda x: float(x.replace('$', '').replace(',', '').strip()) < 20000)]
+        # Generate the sales proposal using AI
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        response = model.generate_content(prompt)
+        
+        # Return the generated proposal text
+        return response.text
+    except Exception as e:
+        st.error(f"Error generating sales proposal: {e}")
+        return None
+
+# Streamlit App UI
+st.title("Generate and Send Personalized Sales Proposal")
+st.write("Use AI to generate personalized sales proposals based on customer information.")
+
+# Inputs for customer details
+customer_name = st.text_input("Customer Name")
+product_name = st.text_input("Product Name")
+product_details = st.text_area("Product Details")
+customer_needs = st.text_area("Customer Needs")
+
+# Button to generate and send proposal
+if st.button("Generate Proposal and Send Email"):
+    if customer_name and product_name and product_details and customer_needs:
+        # Generate the sales proposal using AI
+        proposal = generate_sales_proposal(customer_name, product_name, product_details, customer_needs)
+        
+        if proposal:
+            # Email inputs
+            recipient_email = st.text_input("Recipient Email")
+            subject = f"Personalized Sales Proposal for {customer_name}"
+            
+            # Send the email with the generated proposal
+            send_email(recipient_email, subject, proposal)
     else:
-        filtered_leads = df
-
-    st.write("Filtered Leads:")
-    st.write(filtered_leads)
-
-# Generate Lead Age (days since lead date)
-if df is not None and 'Lead Date' in df.columns:
-    df['Lead Date'] = pd.to_datetime(df['Lead Date'])
-    df['Lead Age (Days)'] = (datetime.now() - df['Lead Date']).dt.days
-    st.write("Lead Age (in Days):")
-    st.write(df[['Lead Name', 'Lead Age (Days)']])
+        st.error("Please fill out all fields to generate the proposal.")
