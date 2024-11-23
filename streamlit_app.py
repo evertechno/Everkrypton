@@ -1,57 +1,28 @@
 import streamlit as st
 import pandas as pd
 import google.generativeai as genai
-import logging
-from brevo_python import Configuration, ApiClient
-from brevo_python.apis.transactional_emails_api import TransactionalEmailsApi
-from brevo_python.models.send_smtp_email import SendSmtpEmail
-from brevo_python.rest import ApiException
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from datetime import datetime
+import logging
 
 # Configure the API key securely from Streamlit's secrets
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
-# Brevo API Configuration
-api_key = st.secrets["BREVO_API_KEY"]
-
-# Streamlit App UI
-st.title("Automated Sales Proposal Generator")
-st.write("Upload your leads' CSV, personalize proposals using AI, and send emails automatically.")
+# Gmail SMTP settings
+SMTP_SERVER = 'smtp.gmail.com'
+SMTP_PORT = 587
+EMAIL_SENDER = 'mahalaxmiastrovastu02@gmail.com'  # Your Gmail address
+EMAIL_PASSWORD = st.secrets["GMAIL_PASSWORD"]  # Store Gmail app password securely in Streamlit secrets
 
 # Configure logging
 log_filename = "sales_proposals.log"
 logging.basicConfig(filename=log_filename, level=logging.INFO)
 
-# Function to send email using Brevo API
-def send_email(to_email, lead_name, proposal):
-    # Set up the Brevo API client
-    configuration = Configuration()
-    configuration.api_key['api-key'] = api_key
-    api_client = ApiClient(configuration)
-    
-    # Initialize the TransactionalEmailsApi
-    api_instance = TransactionalEmailsApi(api_client)
-    
-    # Prepare the email content
-    subject = f"Personalized Proposal for {lead_name}"
-    body = f"Dear {lead_name},\n\n{proposal}\n\nBest regards,\nYour Company Name"
-    
-    # Create the email data structure
-    email_data = SendSmtpEmail(
-        sender={"email": "mahalaxmiastrovastu01@gmail.com"},  # Replace with your sender email
-        to=[{"email": to_email}],
-        subject=subject,
-        html_content=f"<html><body><p>{body}</p></body></html>"
-    )
-    
-    try:
-        # Send the email using Brevo API
-        response = api_instance.send_transac_email(email_data)
-        logging.info(f"Successfully sent email to {to_email}")
-        return True
-    except ApiException as e:
-        logging.error(f"Error sending email to {to_email}: {e}")
-        return False
+# Streamlit App UI
+st.title("Automated Sales Proposal Generator")
+st.write("Upload your leads' CSV, personalize proposals using AI, and send emails automatically.")
 
 # Upload CSV file
 uploaded_file = st.file_uploader("Upload CSV with Lead Data", type=["csv", "xlsx"])
@@ -96,7 +67,7 @@ if df is not None and st.button("Generate and Send Proposals"):
             # Log the proposal creation
             logging.info(f"Generated proposal for {lead_name}: {proposal[:100]}...")
 
-            # Send email using Brevo
+            # Send email using Gmail
             email_sent = send_email(email, lead_name, proposal)
             if email_sent:
                 email_status.append((lead_name, email, "Success"))
@@ -114,6 +85,32 @@ if df is not None and st.button("Generate and Send Proposals"):
     st.write("Email Delivery Status:")
     email_status_df = pd.DataFrame(email_status, columns=['Lead Name', 'Email Address', 'Status'])
     st.write(email_status_df)
+
+# Function to send email using Gmail SMTP
+def send_email(to_email, lead_name, proposal):
+    # Create the email message
+    subject = f"Personalized Proposal for {lead_name}"
+    body = f"Dear {lead_name},\n\n{proposal}\n\nBest regards,\nYour Company Name"
+    
+    # Set up the MIME
+    message = MIMEMultipart()
+    message["From"] = EMAIL_SENDER
+    message["To"] = to_email
+    message["Subject"] = subject
+    message.attach(MIMEText(body, "plain"))
+    
+    # Connect to the Gmail SMTP server and send email
+    try:
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.starttls()  # Start TLS encryption
+            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+            server.sendmail(EMAIL_SENDER, to_email, message.as_string())
+            server.quit()
+            logging.info(f"Successfully sent email to {to_email}")
+            return True
+    except Exception as e:
+        logging.error(f"Error sending email to {to_email}: {e}")
+        return False
 
 # Option to filter leads by price range
 if df is not None:
