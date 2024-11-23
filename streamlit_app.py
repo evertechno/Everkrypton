@@ -20,6 +20,32 @@ EMAIL_PASSWORD = st.secrets["GMAIL_PASSWORD"]  # Store Gmail app password secure
 log_filename = "sales_proposals.log"
 logging.basicConfig(filename=log_filename, level=logging.INFO)
 
+# Function to send email using Gmail SMTP
+def send_email(to_email, lead_name, proposal):
+    # Create the email message
+    subject = f"Personalized Proposal for {lead_name}"
+    body = f"Dear {lead_name},\n\n{proposal}\n\nBest regards,\nYour Company Name"
+    
+    # Set up the MIME
+    message = MIMEMultipart()
+    message["From"] = EMAIL_SENDER
+    message["To"] = to_email
+    message["Subject"] = subject
+    message.attach(MIMEText(body, "plain"))
+    
+    # Connect to the Gmail SMTP server and send email
+    try:
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.starttls()  # Start TLS encryption
+            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+            server.sendmail(EMAIL_SENDER, to_email, message.as_string())
+            server.quit()
+            logging.info(f"Successfully sent email to {to_email}")
+            return True
+    except Exception as e:
+        logging.error(f"Error sending email to {to_email}: {e}")
+        return False
+
 # Streamlit App UI
 st.title("Automated Sales Proposal Generator")
 st.write("Upload your leads' CSV, personalize proposals using AI, and send emails automatically.")
@@ -85,32 +111,6 @@ if df is not None and st.button("Generate and Send Proposals"):
     st.write("Email Delivery Status:")
     email_status_df = pd.DataFrame(email_status, columns=['Lead Name', 'Email Address', 'Status'])
     st.write(email_status_df)
-
-# Function to send email using Gmail SMTP
-def send_email(to_email, lead_name, proposal):
-    # Create the email message
-    subject = f"Personalized Proposal for {lead_name}"
-    body = f"Dear {lead_name},\n\n{proposal}\n\nBest regards,\nYour Company Name"
-    
-    # Set up the MIME
-    message = MIMEMultipart()
-    message["From"] = EMAIL_SENDER
-    message["To"] = to_email
-    message["Subject"] = subject
-    message.attach(MIMEText(body, "plain"))
-    
-    # Connect to the Gmail SMTP server and send email
-    try:
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-            server.starttls()  # Start TLS encryption
-            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
-            server.sendmail(EMAIL_SENDER, to_email, message.as_string())
-            server.quit()
-            logging.info(f"Successfully sent email to {to_email}")
-            return True
-    except Exception as e:
-        logging.error(f"Error sending email to {to_email}: {e}")
-        return False
 
 # Option to filter leads by price range
 if df is not None:
