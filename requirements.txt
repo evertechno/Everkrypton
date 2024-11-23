@@ -13,6 +13,6 @@ requests
 beautifulsoup4
 pyyaml
 word2number
-dateutil
+python-dateutil
 geopy
 textblob
