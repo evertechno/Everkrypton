@@ -17,9 +17,9 @@ from fpdf import FPDF
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
 # Email configuration
-SMTP_SERVER = 'smtp.gmail.com'
+SMTP_SERVER = 'smtp.yourmailserver.com'
 SMTP_PORT = 587
-EMAIL_SENDER = 'mahalaxmiastrovastu02@gmail.com'
+EMAIL_SENDER = 'your_email@example.com'
 EMAIL_PASSWORD = st.secrets["EMAIL_PASSWORD"]  # Store email password securely in Streamlit secrets
 
 # Configure logging
@@ -84,14 +84,27 @@ if df is not None and st.button("Generate Proposals"):
 
     # Send proposals via email
     if st.button("Send Emails"):
+        email_status = []  # To store the status of each email sent
         for lead_name, email, proposal in responses:
             try:
+                # Use a progress bar to show email sending progress
+                progress_bar = st.progress(0)
+                progress_bar.progress(0)  # Initialize progress bar
                 send_email(email, lead_name, proposal)
+                email_status.append((lead_name, email, "Success"))
                 st.success(f"Email sent to {lead_name} at {email}")
                 logging.info(f"{datetime.now()} - Email sent to {lead_name} at {email}")
+                progress_bar.progress(100)  # Complete progress bar
+                
             except Exception as e:
+                email_status.append((lead_name, email, f"Failed: {e}"))
                 st.error(f"Failed to send email to {lead_name}: {e}")
                 logging.error(f"{datetime.now()} - Failed to send email to {lead_name}: {e}")
+
+        # Display email sending status after completion
+        st.write("Email Sending Status:")
+        email_status_df = pd.DataFrame(email_status, columns=['Lead Name', 'Email Address', 'Status'])
+        st.write(email_status_df)
 
     # Save generated proposals to a CSV file for record-keeping
     if st.button("Download Generated Proposals"):
@@ -101,8 +114,11 @@ if df is not None and st.button("Generate Proposals"):
 
     # Provide an option to send a test email
     if st.button("Send Test Email"):
-        send_email("test@example.com", "Test User", "This is a test email. If you received this, the email system is working!")
-        st.success("Test email sent successfully!")
+        try:
+            send_email("test@example.com", "Test User", "This is a test email. If you received this, the email system is working!")
+            st.success("Test email sent successfully!")
+        except Exception as e:
+            st.error(f"Failed to send test email: {e}")
 
 # Function to send email
 def send_email(to_email, lead_name, proposal):
