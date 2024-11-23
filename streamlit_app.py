@@ -2,10 +2,11 @@ import streamlit as st
 import pandas as pd
 import google.generativeai as genai
 import logging
-from brevo_python import Client
+from brevo_python import Configuration, ApiClient
 from brevo_python.apis.transactional_emails_api import TransactionalEmailsApi
 from brevo_python.models.send_smtp_email import SendSmtpEmail
 from brevo_python.rest import ApiException
+from datetime import datetime
 
 # Configure the API key securely from Streamlit's secrets
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
@@ -13,12 +14,9 @@ genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 # Brevo API Configuration
 api_key = st.secrets["BREVO_API_KEY"]
 
-# Create an instance of the API class
-configuration = brevo_python.Configuration()
-configuration.api_key['api-key'] = api_key
-
-client = brevo_python.ApiClient(configuration)
-api_instance = TransactionalEmailsApi(client)
+# Streamlit App UI
+st.title("Automated Sales Proposal Generator")
+st.write("Upload your leads' CSV, personalize proposals using AI, and send emails automatically.")
 
 # Configure logging
 log_filename = "sales_proposals.log"
@@ -26,13 +24,21 @@ logging.basicConfig(filename=log_filename, level=logging.INFO)
 
 # Function to send email using Brevo API
 def send_email(to_email, lead_name, proposal):
-    # Create the email message
+    # Set up the Brevo API client
+    configuration = Configuration()
+    configuration.api_key['api-key'] = api_key
+    api_client = ApiClient(configuration)
+    
+    # Initialize the TransactionalEmailsApi
+    api_instance = TransactionalEmailsApi(api_client)
+    
+    # Prepare the email content
     subject = f"Personalized Proposal for {lead_name}"
     body = f"Dear {lead_name},\n\n{proposal}\n\nBest regards,\nYour Company Name"
     
-    # Prepare email data
+    # Create the email data structure
     email_data = SendSmtpEmail(
-        sender={"email": "your_email@example.com"},  # Replace with your sender email
+        sender={"email": "mahalaxmiastrovastu01@gmail.com"},  # Replace with your sender email
         to=[{"email": to_email}],
         subject=subject,
         html_content=f"<html><body><p>{body}</p></body></html>"
@@ -47,13 +53,9 @@ def send_email(to_email, lead_name, proposal):
         logging.error(f"Error sending email to {to_email}: {e}")
         return False
 
-# Streamlit App UI
-st.title("Automated Sales Proposal Generator")
-st.write("Upload your leads' CSV, personalize proposals using AI, and send emails automatically.")
-
 # Upload CSV file
 uploaded_file = st.file_uploader("Upload CSV with Lead Data", type=["csv", "xlsx"])
-df = None  # Initialize df variable
+df = None  # Initialize the df variable
 
 if uploaded_file is not None:
     # Load CSV data
