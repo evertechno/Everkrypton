@@ -1,6 +1,5 @@
 streamlit
 google-generativeai
-spacy
 textblob
 langdetect
 pyttsx3
