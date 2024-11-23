@@ -28,12 +28,12 @@ def authenticate_gmail():
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            # Start the OAuth flow
+            # Start the OAuth flow using console-based authentication
             flow = InstalledAppFlow.from_client_secrets_file(
                 'client_secret.json', SCOPES)
 
-            # This will automatically handle the redirect_uri
-            creds = flow.run_local_server(port=0)
+            # Use console-based authentication if a browser is unavailable
+            creds = flow.run_console()  # This will output a URL to visit and ask for a code
 
         # Save the credentials for the next run
         with open(CREDS_FILE, 'wb') as token:
