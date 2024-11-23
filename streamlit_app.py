@@ -33,9 +33,10 @@ def authenticate_gmail():
             try:
                 # Use this for local server authentication (should work with a browser)
                 creds = flow.run_local_server(port=0)
-            except Exception:
-                # Fallback to console authentication for headless environments (e.g., cloud deployment)
-                creds = flow.run_console()
+            except Exception as e:
+                st.error(f"Error during OAuth2 authentication: {e}")
+                st.error("Using console-based authentication due to headless environment.")
+                creds = flow.run_console()  # Fallback to console-based authentication
 
         # Save credentials for the next run
         with open('token.pickle', 'wb') as token:
@@ -146,4 +147,3 @@ if df is not None and 'Lead Date' in df.columns:
     df['Lead Age (Days)'] = (datetime.now() - df['Lead Date']).dt.days
     st.write("Lead Age (in Days):")
     st.write(df[['Lead Name', 'Lead Age (Days)']])
-
