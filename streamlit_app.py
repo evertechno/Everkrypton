@@ -3,6 +3,8 @@ import pandas as pd
 import google.generativeai as genai
 import logging
 from brevo_python import Client
+from brevo_python.apis.transactional_emails_api import TransactionalEmailsApi
+from brevo_python.models.send_smtp_email import SendSmtpEmail
 from brevo_python.rest import ApiException
 
 # Configure the API key securely from Streamlit's secrets
@@ -10,29 +12,35 @@ genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
 # Brevo API Configuration
 api_key = st.secrets["BREVO_API_KEY"]
-client = Client(configuration={"api_key": api_key})
+
+# Create an instance of the API class
+configuration = brevo_python.Configuration()
+configuration.api_key['api-key'] = api_key
+
+client = brevo_python.ApiClient(configuration)
+api_instance = TransactionalEmailsApi(client)
 
 # Configure logging
 log_filename = "sales_proposals.log"
 logging.basicConfig(filename=log_filename, level=logging.INFO)
 
-# Function to send email using Brevo (Sendinblue) API
+# Function to send email using Brevo API
 def send_email(to_email, lead_name, proposal):
     # Create the email message
     subject = f"Personalized Proposal for {lead_name}"
     body = f"Dear {lead_name},\n\n{proposal}\n\nBest regards,\nYour Company Name"
     
     # Prepare email data
-    email_data = {
-        "sender": {"email": "your_email@example.com"},  # Replace with your sender email
-        "to": [{"email": to_email}],
-        "subject": subject,
-        "htmlContent": f"<html><body><p>{body}</p></body></html>"
-    }
+    email_data = SendSmtpEmail(
+        sender={"email": "your_email@example.com"},  # Replace with your sender email
+        to=[{"email": to_email}],
+        subject=subject,
+        html_content=f"<html><body><p>{body}</p></body></html>"
+    )
     
     try:
         # Send the email using Brevo API
-        response = client.transactionalEmails.send_transac_email(email_data)
+        response = api_instance.send_transac_email(email_data)
         logging.info(f"Successfully sent email to {to_email}")
         return True
     except ApiException as e:
