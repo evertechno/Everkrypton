@@ -4,8 +4,6 @@ from email.mime.text import MIMEText
 import pandas as pd
 import streamlit as st
 from datetime import datetime
-import urllib.parse
-from email.mime.application import MIMEApplication
 
 # Streamlit App UI
 st.title("Automated Sales Proposal Generator")
@@ -30,11 +28,11 @@ if uploaded_file is not None:
     if not all(col in df.columns for col in required_columns):
         st.error(f"CSV file must contain the following columns: {', '.join(required_columns)}")
 
-# SMTP Email Settings
+# Brevo SMTP Settings
 smtp_server = "smtp-relay.brevo.com"
 smtp_port = 587
-sender_email = "7cd1d3001@smtp-brevo.com"  # Enter your email here
-sender_password = "sender_password"  # Enter your email password here
+sender_email = "your_email@domain.com"  # Replace with your actual email address
+sender_password = "your_brevo_smtp_password"  # Your Brevo SMTP password
 
 def send_email(receiver_email, subject, body):
     try:
