@@ -8,13 +8,15 @@ from googleapiclient.discovery import build
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
+import base64
 
 # Gmail API authentication using service account
 def authenticate_gmail_service_account():
     """Authenticate using a service account for headless environments."""
     SCOPES = ['https://www.googleapis.com/auth/gmail.send']
-    SERVICE_ACCOUNT_FILE = 'credentials.json'  # Update with your service account JSON file
+    SERVICE_ACCOUNT_FILE = 'service_account.json'  # Update with your service account JSON file
     
+    # Authenticate using the service account
     credentials = service_account.Credentials.from_service_account_file(
         SERVICE_ACCOUNT_FILE, scopes=SCOPES)
     
@@ -22,7 +24,7 @@ def authenticate_gmail_service_account():
     service = build('gmail', 'v1', credentials=credentials)
     return service
 
-# Send email function
+# Send email function using Gmail API
 def send_email(service, to_email, subject, body):
     """Send an email using the Gmail API with service account authentication."""
     try:
@@ -93,3 +95,33 @@ if df is not None and st.button("Generate and Send Proposals"):
 
     st.success("All emails have been sent successfully!")
 
+# Option to download generated proposals
+if df is not None and st.button("Download Generated Proposals"):
+    output_df = df[['Lead Name', 'Email Address', 'Interested Product', 'Price Range']]
+    output_df['Proposal'] = output_df.apply(lambda row: f"Dear {row['Lead Name']},\n\nWe are excited to offer you a {row['Interested Product']} that fits your budget of {row['Price Range']}.\n\nBest regards,\nYour Company Name", axis=1)
+    
+    output_df.to_csv("generated_proposals.csv", index=False)
+    st.download_button("Download Proposals", "generated_proposals.csv", "generated_proposals.csv")
+
+# Function to filter leads by budget
+if df is not None:
+    filters = st.selectbox("Filter Leads by Budget", options=["All", "High Budget", "Mid Budget", "Low Budget"])
+
+    if filters == "High Budget":
+        filtered_leads = df[df['Price Range'].apply(lambda x: float(x.replace('$', '').replace(',', '').strip()) > 50000)]
+    elif filters == "Mid Budget":
+        filtered_leads = df[df['Price Range'].apply(lambda x: 20000 <= float(x.replace('$', '').replace(',', '').strip()) <= 50000)]
+    elif filters == "Low Budget":
+        filtered_leads = df[df['Price Range'].apply(lambda x: float(x.replace('$', '').replace(',', '').strip()) < 20000)]
+    else:
+        filtered_leads = df
+
+    st.write("Filtered Leads:")
+    st.write(filtered_leads)
+
+# Generate Lead Age (days since lead date)
+if df is not None and 'Lead Date' in df.columns:
+    df['Lead Date'] = pd.to_datetime(df['Lead Date'])
+    df['Lead Age (Days)'] = (datetime.now() - df['Lead Date']).dt.days
+    st.write("Lead Age (in Days):")
+    st.write(df[['Lead Name', 'Lead Age (Days)']])
