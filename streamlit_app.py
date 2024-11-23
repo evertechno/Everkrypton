@@ -30,8 +30,8 @@ def authenticate_gmail():
             flow = InstalledAppFlow.from_client_secrets_file(
                 'credentials.json', SCOPES)
             
-            # Use this if running in headless mode (no browser open)
-            creds = flow.run_local_server(port=0)
+            # Use this for headless environment (console-based authentication)
+            creds = flow.run_console()
 
         # Save credentials for the next run
         with open('token.pickle', 'wb') as token:
