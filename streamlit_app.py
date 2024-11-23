@@ -14,7 +14,7 @@ sender_password = st.secrets["smtp"]["password"]  # Retrieve SMTP key (Master Pa
 # Configure the Gemini AI API key
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
-# Function to send email
+# Function to send email with better logging
 def send_email(to_email, subject, body):
     try:
         # Setup the MIME
@@ -28,10 +28,14 @@ def send_email(to_email, subject, body):
         
         # Connect to the SMTP server and send email
         with smtplib.SMTP(smtp_server, smtp_port) as server:
+            server.set_debuglevel(1)  # Enable debug mode for SMTP to get detailed logs
             server.starttls()  # Secure the connection
             server.login(sender_email, sender_password)  # Login using the stored credentials
             text = msg.as_string()
-            server.sendmail(sender_email, to_email, text)  # Send the email
+            
+            # Send the email
+            response = server.sendmail(sender_email, to_email, text)  # Send the email
+            st.write(f"Server Response: {response}")  # Print server response for debugging
 
         st.success(f"Email sent successfully to {to_email}")
     
@@ -94,4 +98,3 @@ if uploaded_file is not None:
             send_email(recipient_email, subject, proposal)
 else:
     st.info("Please upload a CSV file to continue.")
-
