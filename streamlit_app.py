@@ -1,72 +1,15 @@
-import os
-import pickle
-import streamlit as st
-import pandas as pd
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request
-from googleapiclient.discovery import build
-from email.mime.text import MIMEText
+import smtplib
 from email.mime.multipart import MIMEMultipart
-import base64
+from email.mime.text import MIMEText
+import pandas as pd
+import streamlit as st
 from datetime import datetime
-
-# OAuth2 Authentication with Gmail API
-SCOPES = ['https://www.googleapis.com/auth/gmail.send']
-CREDS_FILE = 'token.pickle'  # This file stores the credentials
-
-def authenticate_gmail():
-    """Authenticate the user and return Gmail API service."""
-    creds = None
-
-    # Check if token.pickle exists and contains valid credentials
-    if os.path.exists(CREDS_FILE):
-        with open(CREDS_FILE, 'rb') as token:
-            creds = pickle.load(token)
-
-    # If no valid credentials are available, let the user log in
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            # Start the OAuth flow using console-based authentication
-            flow = InstalledAppFlow.from_client_secrets_file(
-                'client_secret.json', SCOPES)
-
-            # Use console-based authentication if a browser is unavailable
-            creds = flow.run_console()  # This will output a URL to visit and ask for a code
-
-        # Save the credentials for the next run
-        with open(CREDS_FILE, 'wb') as token:
-            pickle.dump(creds, token)
-
-    # Build the Gmail API service
-    service = build('gmail', 'v1', credentials=creds)
-    return service
-
-# Send email using Gmail API
-def send_email(service, to_email, subject, body):
-    """Send an email using Gmail API."""
-    try:
-        # Create the email message
-        message = MIMEMultipart()
-        message["From"] = "me"  # 'me' is a special value indicating the authenticated user
-        message["To"] = to_email
-        message["Subject"] = subject
-        message.attach(MIMEText(body, "plain"))
-
-        # Encode the message and send it via Gmail API
-        raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
-        send_message = service.users().messages().send(
-            userId="me", body={"raw": raw_message}).execute()
-        st.success(f"Email successfully sent to {to_email}!")
-
-    except Exception as e:
-        st.error(f"Error sending email: {e}")
-        print(f"Error: {e}")
+import urllib.parse
+from email.mime.application import MIMEApplication
 
 # Streamlit App UI
 st.title("Automated Sales Proposal Generator")
-st.write("Upload your leads' CSV, personalize proposals using AI, and send emails automatically.")
+st.write("Upload your leads' CSV, personalize proposals, and send emails automatically via SMTP.")
 
 # Upload CSV file
 uploaded_file = st.file_uploader("Upload CSV with Lead Data", type=["csv", "xlsx"])
@@ -87,12 +30,40 @@ if uploaded_file is not None:
     if not all(col in df.columns for col in required_columns):
         st.error(f"CSV file must contain the following columns: {', '.join(required_columns)}")
 
-# Process proposals and send emails if the button is clicked
-if df is not None and st.button("Generate and Send Proposals"):
-    # Authenticate Gmail API
-    service = authenticate_gmail()
+# SMTP Email Settings
+smtp_server = "smtp-relay.brevo.com"
+smtp_port = 587
+sender_email = "7cd1d3001@smtp-brevo.com"  # Enter your email here
+sender_password = "sender_password"  # Enter your email password here
 
-    # AI-based proposal generation
+def send_email(receiver_email, subject, body):
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = sender_email
+        msg['To'] = receiver_email
+        msg['Subject'] = subject
+
+        # Attach the body with the msg instance
+        msg.attach(MIMEText(body, 'plain'))
+
+        # Set up the server
+        server = smtplib.SMTP(smtp_server, smtp_port)
+        server.starttls()  # Secure the connection
+        server.login(sender_email, sender_password)
+
+        # Send email
+        text = msg.as_string()
+        server.sendmail(sender_email, receiver_email, text)
+        server.quit()
+
+        return True
+    except Exception as e:
+        st.error(f"Error sending email: {e}")
+        return False
+
+# Process proposals and generate emails if the button is clicked
+if df is not None and st.button("Generate Proposals and Send Emails"):
+    proposals = []
     for _, row in df.iterrows():
         lead_name = row['Lead Name']
         product = row['Interested Product']
@@ -102,17 +73,24 @@ if df is not None and st.button("Generate and Send Proposals"):
         # Personalized Proposal Generation
         proposal = f"Dear {lead_name},\n\nWe are excited to offer you a {product} that fits your budget of {budget}. We believe this will be a great addition to your business.\n\nBest regards,\nYour Company Name"
         
-        # Send Email with Proposal
+        # Store the generated proposal for each lead
+        proposals.append({
+            "Lead Name": lead_name,
+            "Email Address": email,
+            "Proposal": proposal
+        })
+
+        # Send email using SMTP
         subject = f"Personalized Sales Proposal for {lead_name}"
         body = f"Dear {lead_name},\n\n{proposal}\n\nBest regards,\nYour Company Name"
+        success = send_email(email, subject, body)
         
-        # Call the send_email function
-        try:
-            send_email(service, email, subject, body)
-        except Exception as e:
-            st.error(f"Failed to send email to {lead_name} at {email}: {e}")
+        if success:
+            st.success(f"Proposal sent to {lead_name} ({email})")
+        else:
+            st.error(f"Failed to send proposal to {lead_name} ({email})")
 
-    st.success("All emails have been sent successfully!")
+    st.success("All emails have been sent!")
 
 # Option to download generated proposals
 if df is not None and st.button("Download Generated Proposals"):
@@ -121,26 +99,3 @@ if df is not None and st.button("Download Generated Proposals"):
     
     output_df.to_csv("generated_proposals.csv", index=False)
     st.download_button("Download Proposals", "generated_proposals.csv", "generated_proposals.csv")
-
-# Function to filter leads by budget
-if df is not None:
-    filters = st.selectbox("Filter Leads by Budget", options=["All", "High Budget", "Mid Budget", "Low Budget"])
-
-    if filters == "High Budget":
-        filtered_leads = df[df['Price Range'].apply(lambda x: float(x.replace('$', '').replace(',', '').strip()) > 50000)]
-    elif filters == "Mid Budget":
-        filtered_leads = df[df['Price Range'].apply(lambda x: 20000 <= float(x.replace('$', '').replace(',', '').strip()) <= 50000)]
-    elif filters == "Low Budget":
-        filtered_leads = df[df['Price Range'].apply(lambda x: float(x.replace('$', '').replace(',', '').strip()) < 20000)]
-    else:
-        filtered_leads = df
-
-    st.write("Filtered Leads:")
-    st.write(filtered_leads)
-
-# Generate Lead Age (days since lead date)
-if df is not None and 'Lead Date' in df.columns:
-    df['Lead Date'] = pd.to_datetime(df['Lead Date'])
-    df['Lead Age (Days)'] = (datetime.now() - df['Lead Date']).dt.days
-    st.write("Lead Age (in Days):")
-    st.write(df[['Lead Name', 'Lead Age (Days)']])
