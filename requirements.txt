@@ -1,5 +1,6 @@
 streamlit
-email-validator
-dnspython
-pandas
-psutil
+pandas 
+google-generativeai 
+smtplib 
+matplotlib 
+wordcloud
