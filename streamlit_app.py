@@ -14,9 +14,9 @@ from wordcloud import WordCloud
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
 # Email configuration
-SMTP_SERVER = 'smtp.yourmailserver.com'
+SMTP_SERVER = 'smtp.gmail.com'
 SMTP_PORT = 587
-EMAIL_SENDER = 'your_email@example.com'
+EMAIL_SENDER = 'mahalaxmiastrovastu02@gmail.com'
 EMAIL_PASSWORD = st.secrets["EMAIL_PASSWORD"]  # Store email password securely in Streamlit secrets
 
 # Configure logging
