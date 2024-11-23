@@ -32,12 +32,12 @@ def authenticate_gmail():
             flow = InstalledAppFlow.from_client_secrets_file(
                 'client_secret.json', SCOPES)
 
-            # Run console-based authentication
+            # Generate the authorization URL for manual login
             print("Please go to this URL: ")
             auth_url, _ = flow.authorization_url(access_type='offline', include_granted_scopes='true')
             print(auth_url)
 
-            # Manually authenticate: Visit the URL, get the authorization code, and paste it here.
+            # Ask the user to input the authorization code manually
             code = input('Enter the authorization code: ')
             creds = flow.fetch_token(authorization_response=code, client_secret_file='client_secret.json')
 
