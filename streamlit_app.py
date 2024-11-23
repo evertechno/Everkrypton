@@ -31,11 +31,14 @@ if uploaded_file is not None:
 # Brevo SMTP Settings
 smtp_server = "smtp-relay.brevo.com"
 smtp_port = 587
-sender_email = "your_email@domain.com"  # Replace with your actual email address
-sender_password = "your_brevo_smtp_password"  # Your Brevo SMTP password
+
+# Replace with your Brevo SMTP username and SMTP key (Master Password)
+sender_email = "7cd1d3001@smtp-brevo.com"  # Your Brevo SMTP username
+sender_password = "your_smtp_key"  # Replace with your Brevo SMTP key (Master Password)
 
 def send_email(receiver_email, subject, body):
     try:
+        # Create the email
         msg = MIMEMultipart()
         msg['From'] = sender_email
         msg['To'] = receiver_email
@@ -47,7 +50,7 @@ def send_email(receiver_email, subject, body):
         # Set up the server
         server = smtplib.SMTP(smtp_server, smtp_port)
         server.starttls()  # Secure the connection
-        server.login(sender_email, sender_password)
+        server.login(sender_email, sender_password)  # Log in using the SMTP key (Master Password)
 
         # Send email
         text = msg.as_string()
@@ -97,3 +100,26 @@ if df is not None and st.button("Download Generated Proposals"):
     
     output_df.to_csv("generated_proposals.csv", index=False)
     st.download_button("Download Proposals", "generated_proposals.csv", "generated_proposals.csv")
+
+# Function to filter leads by budget
+if df is not None:
+    filters = st.selectbox("Filter Leads by Budget", options=["All", "High Budget", "Mid Budget", "Low Budget"])
+
+    if filters == "High Budget":
+        filtered_leads = df[df['Price Range'].apply(lambda x: float(x.replace('$', '').replace(',', '').strip()) > 50000)]
+    elif filters == "Mid Budget":
+        filtered_leads = df[df['Price Range'].apply(lambda x: 20000 <= float(x.replace('$', '').replace(',', '').strip()) <= 50000)]
+    elif filters == "Low Budget":
+        filtered_leads = df[df['Price Range'].apply(lambda x: float(x.replace('$', '').replace(',', '').strip()) < 20000)]
+    else:
+        filtered_leads = df
+
+    st.write("Filtered Leads:")
+    st.write(filtered_leads)
+
+# Generate Lead Age (days since lead date)
+if df is not None and 'Lead Date' in df.columns:
+    df['Lead Date'] = pd.to_datetime(df['Lead Date'])
+    df['Lead Age (Days)'] = (datetime.now() - df['Lead Date']).dt.days
+    st.write("Lead Age (in Days):")
+    st.write(df[['Lead Name', 'Lead Age (Days)']])
