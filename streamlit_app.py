@@ -14,7 +14,7 @@ genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 SMTP_SERVER = 'smtp-relay.brevo.com'  # Replace with your SMTP server
 SMTP_PORT = 587
 EMAIL_SENDER = '7cd1d3001@smtp-brevo.com'  # Replace with your email address
-EMAIL_PASSWORD = st.secrets[""]  # Store email password securely in Streamlit secrets
+EMAIL_PASSWORD = st.secrets["EMAIL_PASSWORD"]  # Store email password securely in Streamlit secrets
 
 # Configure logging
 log_filename = "sales_proposals.log"
