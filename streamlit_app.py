@@ -1,41 +1,57 @@
 import os
 import pickle
-import smtplib
 import streamlit as st
 import pandas as pd
-from google.oauth2 import service_account
+from google_auth_oauthlib.flow import InstalledAppFlow
+from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from datetime import datetime
 import base64
+from datetime import datetime
 
-# Gmail API authentication using service account
-def authenticate_gmail_service_account():
-    """Authenticate using a service account for headless environments."""
-    SCOPES = ['https://www.googleapis.com/auth/gmail.send']
-    SERVICE_ACCOUNT_FILE = 'service_account.json'  # Update with your service account JSON file
-    
-    # Authenticate using the service account
-    credentials = service_account.Credentials.from_service_account_file(
-        SERVICE_ACCOUNT_FILE, scopes=SCOPES)
-    
+# OAuth2 Authentication with Gmail API
+SCOPES = ['https://www.googleapis.com/auth/gmail.send']
+CREDS_FILE = 'token.pickle'  # This file stores the credentials
+
+def authenticate_gmail():
+    """Authenticate the user and return Gmail API service."""
+    creds = None
+
+    # Check if token.pickle exists and contains valid credentials
+    if os.path.exists(CREDS_FILE):
+        with open(CREDS_FILE, 'rb') as token:
+            creds = pickle.load(token)
+
+    # If no valid credentials are available, let the user log in
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                'client_secret.json', SCOPES)  # Provide path to your credentials
+            creds = flow.run_local_server(port=0)
+
+        # Save the credentials for the next run
+        with open(CREDS_FILE, 'wb') as token:
+            pickle.dump(creds, token)
+
     # Build the Gmail API service
-    service = build('gmail', 'v1', credentials=credentials)
+    service = build('gmail', 'v1', credentials=creds)
     return service
 
-# Send email function using Gmail API
+# Send email using Gmail API
 def send_email(service, to_email, subject, body):
-    """Send an email using the Gmail API with service account authentication."""
+    """Send an email using Gmail API."""
     try:
         # Create the email message
         message = MIMEMultipart()
-        message["From"] = "your-email@gmail.com"  # Use your Gmail address
+        message["From"] = "me"  # 'me' is a special value indicating the authenticated user
         message["To"] = to_email
         message["Subject"] = subject
         message.attach(MIMEText(body, "plain"))
 
-        # Encode the message and send it via the Gmail API
+        # Encode the message and send it via Gmail API
         raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
         send_message = service.users().messages().send(
             userId="me", body={"raw": raw_message}).execute()
@@ -68,10 +84,10 @@ if uploaded_file is not None:
     if not all(col in df.columns for col in required_columns):
         st.error(f"CSV file must contain the following columns: {', '.join(required_columns)}")
 
-# Process proposals if the button is clicked
+# Process proposals and send emails if the button is clicked
 if df is not None and st.button("Generate and Send Proposals"):
-    # Authenticate Gmail service using service account
-    service = authenticate_gmail_service_account()
+    # Authenticate Gmail API
+    service = authenticate_gmail()
 
     # AI-based proposal generation
     for _, row in df.iterrows():
