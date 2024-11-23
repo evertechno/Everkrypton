@@ -1,48 +1,45 @@
 import streamlit as st
 import pandas as pd
 import google.generativeai as genai
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import sib_api_v3_sdk
+from sib_api_v3_sdk.rest import ApiException
 from datetime import datetime
 import logging
 
 # Configure the API key securely from Streamlit's secrets
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
-# Email configuration
-SMTP_SERVER = 'smtp-relay.brevo.com'  # Replace with your SMTP server
-SMTP_PORT = 587
-EMAIL_SENDER = '7cd1d3001@smtp-brevo.com'  # Replace with your email address
-EMAIL_PASSWORD = st.secrets["EMAIL_PASSWORD"]  # Store email password securely in Streamlit secrets
+# Brevo API Configuration
+api_key = st.secrets["BREVO_API_KEY"]
+sib_api_v3_sdk.configuration.api_key['api-key'] = api_key
 
 # Configure logging
 log_filename = "sales_proposals.log"
 logging.basicConfig(filename=log_filename, level=logging.INFO)
 
-# Function to send email
+# Function to send email using Brevo (Sendinblue) API
 def send_email(to_email, lead_name, proposal):
     # Create the email message
     subject = f"Personalized Proposal for {lead_name}"
     body = f"Dear {lead_name},\n\n{proposal}\n\nBest regards,\nYour Company Name"
+
+    # Configure Brevo API client
+    api_instance = sib_api_v3_sdk.TransactionalEmailsApi()
     
-    # Set up the MIME
-    message = MIMEMultipart()
-    message["From"] = EMAIL_SENDER
-    message["To"] = to_email
-    message["Subject"] = subject
-    message.attach(MIMEText(body, "plain"))
-    
-    # Connect to the SMTP server and send email
+    # Prepare email data
+    email_data = {
+        "sender": {"email": "mahalaxmiastrovastu01@gmail.com"},  # Replace with your sender email
+        "to": [{"email": to_email}],
+        "subject": subject,
+        "htmlContent": f"<html><body><p>{body}</p></body></html>"
+    }
+
     try:
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-            server.starttls()  # Start TLS encryption
-            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
-            server.sendmail(EMAIL_SENDER, to_email, message.as_string())
-            server.quit()
-            logging.info(f"{datetime.now()} - Successfully sent email to {to_email}")
-            return True
-    except Exception as e:
+        # Send the email
+        response = api_instance.send_transac_email(email_data)
+        logging.info(f"{datetime.now()} - Successfully sent email to {to_email}")
+        return True
+    except ApiException as e:
         logging.error(f"{datetime.now()} - Error sending email to {to_email}: {e}")
         return False
 
@@ -93,7 +90,7 @@ if df is not None and st.button("Generate and Send Proposals"):
             # Log the proposal creation
             logging.info(f"{datetime.now()} - Generated proposal for {lead_name}: {proposal[:100]}...")
 
-            # Send email
+            # Send email using Brevo
             email_sent = send_email(email, lead_name, proposal)
             if email_sent:
                 email_status.append((lead_name, email, "Success"))
