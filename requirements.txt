@@ -6,3 +6,4 @@ wordcloud
 openpyxl
 fpdf
 brevo-python
+brevo_python.apis
