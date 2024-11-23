@@ -1,17 +1,16 @@
 import streamlit as st
 import pandas as pd
 import google.generativeai as genai
-import sib_api_v3_sdk
-from sib_api_v3_sdk.rest import ApiException
-from datetime import datetime
 import logging
+from brevo_python import Client
+from brevo_python.rest import ApiException
 
 # Configure the API key securely from Streamlit's secrets
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
 # Brevo API Configuration
 api_key = st.secrets["BREVO_API_KEY"]
-sib_api_v3_sdk.configuration.api_key['api-key'] = api_key
+client = Client(configuration={"api_key": api_key})
 
 # Configure logging
 log_filename = "sales_proposals.log"
@@ -22,25 +21,22 @@ def send_email(to_email, lead_name, proposal):
     # Create the email message
     subject = f"Personalized Proposal for {lead_name}"
     body = f"Dear {lead_name},\n\n{proposal}\n\nBest regards,\nYour Company Name"
-
-    # Configure Brevo API client
-    api_instance = sib_api_v3_sdk.TransactionalEmailsApi()
     
     # Prepare email data
     email_data = {
-        "sender": {"email": "mahalaxmiastrovastu01@gmail.com"},  # Replace with your sender email
+        "sender": {"email": "your_email@example.com"},  # Replace with your sender email
         "to": [{"email": to_email}],
         "subject": subject,
         "htmlContent": f"<html><body><p>{body}</p></body></html>"
     }
-
+    
     try:
-        # Send the email
-        response = api_instance.send_transac_email(email_data)
-        logging.info(f"{datetime.now()} - Successfully sent email to {to_email}")
+        # Send the email using Brevo API
+        response = client.transactionalEmails.send_transac_email(email_data)
+        logging.info(f"Successfully sent email to {to_email}")
         return True
     except ApiException as e:
-        logging.error(f"{datetime.now()} - Error sending email to {to_email}: {e}")
+        logging.error(f"Error sending email to {to_email}: {e}")
         return False
 
 # Streamlit App UI
@@ -88,7 +84,7 @@ if df is not None and st.button("Generate and Send Proposals"):
             responses.append((lead_name, email, proposal))
             
             # Log the proposal creation
-            logging.info(f"{datetime.now()} - Generated proposal for {lead_name}: {proposal[:100]}...")
+            logging.info(f"Generated proposal for {lead_name}: {proposal[:100]}...")
 
             # Send email using Brevo
             email_sent = send_email(email, lead_name, proposal)
@@ -102,9 +98,56 @@ if df is not None and st.button("Generate and Send Proposals"):
         except Exception as e:
             email_status.append((lead_name, email, f"Error: {e}"))
             st.error(f"Error generating proposal for {lead_name}: {e}")
-            logging.error(f"{datetime.now()} - Error generating proposal for {lead_name}: {e}")
+            logging.error(f"Error generating proposal for {lead_name}: {e}")
     
     # Show email status
     st.write("Email Delivery Status:")
     email_status_df = pd.DataFrame(email_status, columns=['Lead Name', 'Email Address', 'Status'])
     st.write(email_status_df)
+
+# Option to filter leads by price range
+if df is not None:
+    filters = st.selectbox("Filter Leads by Budget", options=["All", "High Budget", "Mid Budget", "Low Budget"])
+
+    if filters == "High Budget":
+        filtered_leads = df[df['Price Range'].apply(lambda x: float(x.replace('$', '').replace(',', '').strip()) > 50000)]
+    elif filters == "Mid Budget":
+        filtered_leads = df[df['Price Range'].apply(lambda x: 20000 <= float(x.replace('$', '').replace(',', '').strip()) <= 50000)]
+    elif filters == "Low Budget":
+        filtered_leads = df[df['Price Range'].apply(lambda x: float(x.replace('$', '').replace(',', '').strip()) < 20000)]
+    else:
+        filtered_leads = df
+
+    st.write("Filtered Leads:")
+    st.write(filtered_leads)
+
+# Generate Lead Age (days since lead date)
+if df is not None and 'Lead Date' in df.columns:
+    df['Lead Date'] = pd.to_datetime(df['Lead Date'])
+    df['Lead Age (Days)'] = (datetime.now() - df['Lead Date']).dt.days
+    st.write("Lead Age (in Days):")
+    st.write(df[['Lead Name', 'Lead Age (Days)']])
+
+# Option to generate and visualize a dashboard with lead statistics
+if df is not None and st.button("Generate Dashboard"):
+    # Placeholder code for a simple dashboard showing lead stats
+    st.write("Dashboard:")
+    st.write(f"Total Leads: {len(df)}")
+    st.write(f"Leads Interested in Product A: {len(df[df['Interested Product'] == 'Product A'])}")
+    st.write(f"Leads Interested in Product B: {len(df[df['Interested Product'] == 'Product B'])}")
+
+    # Plotting a bar chart of leads per product
+    product_counts = df['Interested Product'].value_counts()
+    st.write("Leads per Product:")
+    st.bar_chart(product_counts)
+
+    # Generate Salesperson Assignment
+    salesperson = []
+    for _, row in df.iterrows():
+        if row['Price Range'] > 50000:
+            salesperson.append('John Doe')
+        else:
+            salesperson.append('Jane Smith')
+    df['Salesperson'] = salesperson
+    st.write("Lead Assignments:")
+    st.write(df[['Lead Name', 'Salesperson']])
