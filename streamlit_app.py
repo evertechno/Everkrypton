@@ -15,7 +15,7 @@ SCOPES = ['https://www.googleapis.com/auth/gmail.send']
 CREDS_FILE = 'token.pickle'  # This file stores the credentials
 
 def authenticate_gmail():
-    """Authenticate the user and return Gmail API service."""
+    """Authenticate the user and return Gmail API service using console authentication."""
     creds = None
 
     # Check if token.pickle exists and contains valid credentials
@@ -30,7 +30,7 @@ def authenticate_gmail():
         else:
             flow = InstalledAppFlow.from_client_secrets_file(
                 'client_secret.json', SCOPES)  # Provide path to your credentials
-            creds = flow.run_local_server(port=0)
+            creds = flow.run_console()  # Use console authentication if GUI is not available
 
         # Save the credentials for the next run
         with open(CREDS_FILE, 'wb') as token:
