@@ -5,6 +5,12 @@ import pandas as pd
 import streamlit as st
 from datetime import datetime
 
+# SMTP Credentials and Server Info
+smtp_server = "smtp-relay.brevo.com"
+smtp_port = 587
+sender_email = "7cd1d3001@smtp-brevo.com"  # Your SMTP email address
+sender_password = "your_smtp_key"  # Your SMTP key (Master Password)
+
 # Streamlit App UI
 st.title("Automated Sales Proposal Generator")
 st.write("Upload your leads' CSV, personalize proposals, and send emails automatically via SMTP.")
@@ -28,14 +34,7 @@ if uploaded_file is not None:
     if not all(col in df.columns for col in required_columns):
         st.error(f"CSV file must contain the following columns: {', '.join(required_columns)}")
 
-# Brevo SMTP Settings
-smtp_server = "smtp-relay.brevo.com"
-smtp_port = 587
-
-# Replace with your Brevo SMTP username and SMTP key (Master Password)
-sender_email = "7cd1d3001@smtp-brevo.com"  # Your Brevo SMTP username
-sender_password = "your_smtp_key"  # Replace with your Brevo SMTP key (Master Password)
-
+# Function to send emails
 def send_email(receiver_email, subject, body):
     try:
         # Create the email
@@ -59,7 +58,7 @@ def send_email(receiver_email, subject, body):
 
         return True
     except Exception as e:
-        st.error(f"Error sending email: {e}")
+        print(f"Error sending email: {e}")
         return False
 
 # Process proposals and generate emails if the button is clicked
