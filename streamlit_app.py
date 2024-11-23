@@ -8,6 +8,7 @@ from datetime import datetime
 import os
 import logging
 import matplotlib.pyplot as plt
+from io import BytesIO
 
 # Configure the API key securely from Streamlit's secrets
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
@@ -212,3 +213,81 @@ if st.button("Show Email Templates"):
 if st.button("Export Filtered Leads to CSV"):
     filtered_leads.to_csv("filtered_leads.csv", index=False)
     st.download_button("Download Filtered Leads CSV", "filtered_leads.csv")
+
+# Option to send a custom email to selected leads
+if st.button("Send Custom Email to Leads"):
+    custom_email_content = st.text_area("Enter Custom Email Content", "")
+    if st.button("Send Custom Email"):
+        for email in filtered_leads['Email Address']:
+            send_email(email, "Custom Email", custom_email_content)
+        st.success("Custom email sent to selected leads.")
+
+# Option to track proposal history
+if st.button("Track Proposal History"):
+    proposal_history = os.listdir('proposals_db') if os.path.exists('proposals_db') else []
+    st.write("Proposal History:")
+    st.write(proposal_history)
+
+# Option to visualize product interest by lead
+if st.button("Visualize Product Interest by Lead"):
+    product_interest = df.groupby('Interested Product').size()
+    st.write("Product Interest by Lead:")
+    st.bar_chart(product_interest)
+
+# Option to generate lead interest word cloud
+if st.button("Generate Word Cloud of Product Interest"):
+    from wordcloud import WordCloud
+    product_interest_list = df['Interested Product'].tolist()
+    wordcloud = WordCloud().generate(" ".join(product_interest_list))
+    st.image(wordcloud.to_array(), use_column_width=True)
+
+# Option to visualize conversion by product
+if st.button("Visualize Conversion by Product"):
+    conversion_by_product = df.groupby('Interested Product')['Price Range'].apply(lambda x: len(x) / len(df))
+    st.write("Conversion by Product:")
+    st.bar_chart(conversion_by_product)
+
+# Option to generate sales forecast based on lead data
+if st.button("Generate Sales Forecast"):
+    sales_forecast = df.groupby('Interested Product').size() * 1000  # Placeholder, can be replaced with actual model
+    st.write("Sales Forecast:")
+    st.bar_chart(sales_forecast)
+
+# Option to filter leads by interest in multiple products
+if st.button("Filter Leads by Multiple Products"):
+    selected_products = st.multiselect("Select Products", df['Interested Product'].unique())
+    filtered_leads_multiple_products = df[df['Interested Product'].isin(selected_products)]
+    st.write("Filtered Leads by Products:")
+    st.write(filtered_leads_multiple_products)
+
+# Option to display detailed statistics of lead conversion by budget
+if st.button("Lead Conversion by Budget"):
+    df['Budget Range'] = df['Price Range'].apply(lambda x: 'High' if float(x.replace('$', '').replace(',', '').strip()) > 50000 else 'Mid' if float(x.replace('$', '').replace(',', '').strip()) >= 20000 else 'Low')
+    conversion_by_budget = df.groupby('Budget Range').size()
+    st.write("Conversion by Budget Range:")
+    st.bar_chart(conversion_by_budget)
+
+# Option to track leads’ engagement with proposal
+if st.button("Track Lead Engagement with Proposals"):
+    # Simulate engagement tracking
+    engagement_data = {
+        'Lead Name': df['Lead Name'],
+        'Email Opened': [True if x % 2 == 0 else False for x in range(len(df))]
+    }
+    engagement_df = pd.DataFrame(engagement_data)
+    st.write("Lead Engagement:")
+    st.write(engagement_df)
+
+# Option to generate summary of all proposals
+if st.button("Generate Proposal Summary"):
+    proposals_summary = "Total Proposals Generated: " + str(len(responses))
+    st.write("Proposal Summary:")
+    st.write(proposals_summary)
+
+# Option to store filtered leads in a separate directory
+if st.button("Store Filtered Leads in Directory"):
+    if not os.path.exists('filtered_leads_db'):
+        os.mkdir('filtered_leads_db')
+    filtered_leads.to_csv("filtered_leads_db/filtered_leads.csv", index=False)
+    st.success("Filtered leads stored successfully.")
+
