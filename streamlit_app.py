@@ -13,7 +13,7 @@ from datetime import datetime
 def authenticate_gmail_service_account():
     """Authenticate using a service account for headless environments."""
     SCOPES = ['https://www.googleapis.com/auth/gmail.send']
-    SERVICE_ACCOUNT_FILE = '/credentials.json'  # Update with your service account JSON file
+    SERVICE_ACCOUNT_FILE = 'credentials.json'  # Update with your service account JSON file
     
     credentials = service_account.Credentials.from_service_account_file(
         SERVICE_ACCOUNT_FILE, scopes=SCOPES)
