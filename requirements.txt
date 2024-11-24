@@ -1,3 +1,5 @@
 streamlit
-pandas
-google.generativeai
+sib-api-v3-sdk 
+pandas 
+google-generativeai
+
