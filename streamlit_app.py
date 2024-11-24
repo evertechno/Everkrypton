@@ -1,141 +1,146 @@
+import smtplib
 import streamlit as st
 import pandas as pd
-import smtplib
+import sib_api_v3_sdk
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from pprint import pprint
 import google.generativeai as genai
-import sib_api_v3_sdk
 
-
-# --- Config ---
-
-def get_api_key(key_name):
-    try:
-        return st.secrets[key_name]
-    except KeyError:
-        st.error(f"Missing '{key_name}' in Streamlit secrets! Please add the API keys.")
-        st.stop()  # Stop the app if secrets are missing
-
-
-# API keys
-BREVO_API_KEY = get_api_key("brevo_api_key")
-SMTP_USERNAME = get_api_key("smtp_username")
-SMTP_PASSWORD = get_api_key("smtp_password")
-GOOGLE_API_KEY = get_api_key("google_api_key")
-
-
-# --- Initialize API ---
-
-
+# ----------------------------
+# Brevo API Setup
+# ----------------------------
 configuration = sib_api_v3_sdk.Configuration()
-configuration.api_key["api-key"] = BREVO_API_KEY
-api_client = sib_api_v3_sdk.ApiClient(configuration)
-api_instance = sib_api_v3_sdk.EmailCampaignsApi(api_client)
+configuration.api_key['api-key'] = st.secrets["brevo"]["api_key"]
+api_instance = sib_api_v3_sdk.EmailCampaignsApi(sib_api_v3_sdk.ApiClient(configuration))
 
+# ----------------------------
+# SMTP Configuration
+# ----------------------------
+smtp_server = "smtp-relay.brevo.com"
+smtp_port = 587
+sender_email = st.secrets["smtp"]["username"]
+sender_password = st.secrets["smtp"]["password"]
 
+# Configure the Gemini AI API key for proposal generation
+genai.configure(api_key=st.secrets["google"]["GOOGLE_API_KEY"])
 
-# --- Email Sending Functions ---
-
-def send_email(from_addr, to_addr, subject, body, from_name="Example Sender"):
-    msg = MIMEMultipart()
-    msg['From'] = from_addr
-    msg['To'] = to_addr
-    msg['Subject'] = subject
-    msg.attach(MIMEText(body, 'html'))
-
+# ----------------------------
+# Function to Create Brevo Campaign
+# ----------------------------
+def create_brevo_campaign():
     try:
-        smtp_server = "smtp-relay.brevo.com"
-        smtp_port = 587
-        with smtplib.SMTP(smtp_server, smtp_port) as server:
-            server.ehlo()
-            server.starttls()
-            server.ehlo()
-            server.login(SMTP_USERNAME, SMTP_PASSWORD)
-            server.sendmail(from_addr, to_addr, msg.as_string())
+        # Construct the email campaign using the supported parameters
+        campaign_data = {
+            "name": "Campaign sent via the API",
+            "subject": "My subject",
+            "sender": {"name": "From Name", "email": "myfromemail@mycompany.com"},
+            "html_content": "Congratulations! You successfully sent this example campaign via the Brevo API.",
+            "recipients": {"listIds": [2, 7]},  # List IDs to send to
+            "scheduled_at": "2024-12-01 00:00:01"  # Example of scheduling the campaign
+        }
 
-        st.success(f"Email sent to {to_addr} successfully.")
-    except smtplib.SMTPAuthenticationError as e:
-        st.error(f"SMTP Authentication Error: {e}")
+        # Create the email campaign using the Brevo API
+        api_response = api_instance.create_email_campaign(campaign_data)
+        pprint(api_response)
+        return api_response
+    except Exception as e:
+        st.error(f"Error creating Brevo campaign: {e}")
+        return None
+
+# ----------------------------
+# Function to Send Email via SMTP
+# ----------------------------
+def send_email(from_name, to_email, subject, body):
+    try:
+        # Create the email message
+        msg = MIMEMultipart()
+        msg['From'] = from_name
+        msg['To'] = to_email
+        msg['Subject'] = subject
+        msg.attach(MIMEText(body, 'plain'))
+        
+        # Connect to SMTP server and send the email
+        with smtplib.SMTP(smtp_server, smtp_port) as server:
+            server.set_debuglevel(1)  # Enable debug level for detailed SMTP logs
+            server.starttls()  # Start TLS encryption
+            server.login(sender_email, sender_password)  # Login with credentials
+            text = msg.as_string()
+            response = server.sendmail(sender_email, to_email, text)
+            st.write(f"Server Response: {response}")
+
+        st.success(f"Email sent successfully to {to_email}")
+    
     except Exception as e:
         st.error(f"Error sending email: {e}")
 
-
-# --- AI-based email generation ---
-def generate_email_content(customer_data):
-
-  try: 
-    # Clear prompt, to properly create separate promps if necessary
-    prompt = f"""
-      Generate a personalized sales email with:
-
-      Customer Name: {customer_data.get('Name', 'Customer')}
-      Product: {customer_data.get('Product', 'Product')}
-      Product Details: {customer_data.get('Product Details', 'No Details Available')}
-      Customer Needs: {customer_data.get('Customer Needs', 'No Specific Needs Available')}
-
-
-      Make sure you create:
-          1. "From" field with name for a company: `[Company Name]`
-          2.  Subject Line for a sale 
-          3. A professional persuasive body of the email
-
-
-      Output in this format: 
-      [FROM NAME]
-      [SUBJECT LINE]
-      [EMAIL BODY]
-
-
-    """
-
-    response = genai.generate_content(prompt=prompt, model_name='gemini-pro-v1.5')
-
-
-    #Check if the response is successful before handling data
-    if not response.error:
-       generated_content = response.text.strip().split("\n", maxsplit=2)  
-       if len(generated_content)==3:  # Ensure the split works
-         return generated_content[0].strip(),generated_content[1].strip(),generated_content[2].strip() # extract all needed text correctly
-    else:
-        st.error(f"Error Generating email from AI: {response.error}")  #Important: to prevent crashes
-
-
-
-    return None, None, None
-
-
-  except Exception as e:
-
-        st.error(f"An unexpected error occurred while generating the email content: {e}")
-        return None,None,None
-# --- Streamlit App ---
-st.title("Personalized Sales Proposals & Emails")
-
-uploaded_file = st.file_uploader("Upload your customer data (CSV)", type="csv")
-
-
-if uploaded_file:
+# ----------------------------
+# Function to Generate Personalized Sales Proposal using AI
+# ----------------------------
+def generate_sales_proposal(customer_name, product_name, product_details, customer_needs):
     try:
-        df = pd.read_csv(uploaded_file)
-        st.write("Uploaded Customer Data:")
-        st.dataframe(df)
+        # Define the prompt for the AI model to generate personalized email content
+        prompt = f"""
+        Generate a personalized sales email for a customer named {customer_name}. 
+        The product is {product_name}, and here are the details: {product_details}. 
+        The customer's needs are: {customer_needs}. 
+        
+        Generate:
+        1. A personalized "From" name (e.g., From Name, Company).
+        2. A personalized "Subject" for the email.
+        3. A personalized email "Body" content that is professional and persuasive, addressing the customer's needs.
+        """
 
-        for index, row in df.iterrows():
-
-            customer_data = row.to_dict()
-
-            from_name, subject, body = generate_email_content(customer_data)
-          
-
-            if from_name and subject and body:  #Important: to check AI response returned correct info 
-
-                send_email(
-                    from_name, customer_data['Email'], subject, body)
-   
-            else:
-              st.error("AI Email generation was not successful") # Important!
-
+        # Use Gemini AI to generate personalized content
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        response = model.generate_content(prompt)
+        
+        # Extract the generated "From" name, subject, and body from the response
+        generated_content = response.text.split("\n")
+        from_name = generated_content[0].strip() if len(generated_content) > 0 else "From Name"
+        subject = generated_content[1].strip() if len(generated_content) > 1 else "Subject Line"
+        body = "\n".join(generated_content[2:]).strip() if len(generated_content) > 2 else "Body content not generated"
+        
+        return from_name, subject, body
     except Exception as e:
-        st.error(f"An error occurred during file processing: {e}")
+        st.error(f"Error generating sales proposal: {e}")
+        return None, None, None
+
+# ----------------------------
+# Streamlit App UI
+# ----------------------------
+st.title("Generate and Send Personalized Sales Proposal")
+st.write("Upload a CSV file with customer details to generate and send personalized proposals.")
+
+# File upload for CSV
+uploaded_file = st.file_uploader("Upload your CSV file", type="csv")
+
+# Check if a file was uploaded
+if uploaded_file is not None:
+    # Read the CSV file into a DataFrame
+    df = pd.read_csv(uploaded_file)
+
+    # Display the uploaded data
+    st.write("Uploaded CSV Data:")
+    st.dataframe(df)
+
+    # Process each row in the CSV to generate and send proposals
+    for index, row in df.iterrows():
+        customer_name = row['Name']
+        recipient_email = row['Email']
+        product_name = row['Product']
+        product_details = row['Product Details']
+        customer_needs = row['Customer Needs']
+        
+        # Generate the sales proposal using AI
+        from_name, subject, body = generate_sales_proposal(customer_name, product_name, product_details, customer_needs)
+        
+        if from_name and subject and body:
+            # Send the proposal via SMTP
+            send_email(from_name, recipient_email, subject, body)
+
+    # Optionally, create a Brevo campaign (this step can be skipped or used to send marketing campaigns)
+    create_brevo_campaign()
+
 else:
-    st.info("Please upload a valid CSV file.")
+    st.info("Please upload a CSV file to continue.")
