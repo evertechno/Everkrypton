@@ -10,7 +10,6 @@ import google.generativeai as genai
 # ----------------------------
 # Brevo API Setup
 # ----------------------------
-# Configure the Brevo API key using Streamlit secrets
 configuration = sib_api_v3_sdk.Configuration()
 configuration.api_key['api-key'] = st.secrets["brevo"]["api_key"]
 api_instance = sib_api_v3_sdk.EmailCampaignsApi(sib_api_v3_sdk.ApiClient(configuration))
@@ -20,8 +19,8 @@ api_instance = sib_api_v3_sdk.EmailCampaignsApi(sib_api_v3_sdk.ApiClient(configu
 # ----------------------------
 smtp_server = "smtp-relay.brevo.com"
 smtp_port = 587
-sender_email = st.secrets["smtp"]["username"]  # Retrieve SMTP username from Streamlit secrets
-sender_password = st.secrets["smtp"]["password"]  # Retrieve SMTP password (Master Password) from Streamlit secrets
+sender_email = st.secrets["smtp"]["username"]
+sender_password = st.secrets["smtp"]["password"]
 
 # Configure the Gemini AI API key for proposal generation
 genai.configure(api_key=st.secrets["google"]["GOOGLE_API_KEY"])
@@ -31,7 +30,7 @@ genai.configure(api_key=st.secrets["google"]["GOOGLE_API_KEY"])
 # ----------------------------
 def create_brevo_campaign():
     try:
-        # Updated: Check API documentation for valid parameters
+        # Construct the email campaign using the supported parameters
         campaign_data = {
             "name": "Campaign sent via the API",
             "subject": "My subject",
