@@ -10,16 +10,18 @@ import google.generativeai as genai
 # ----------------------------
 # Brevo API Setup
 # ----------------------------
-sib_api_v3_sdk.configuration.api_key['api-key'] = st.secrets["brevo"]["api_key"]
-api_instance = sib_api_v3_sdk.EmailCampaignsApi()
+# Configure the Brevo API key using Streamlit secrets
+configuration = sib_api_v3_sdk.Configuration()
+configuration.api_key['api-key'] = st.secrets["brevo"]["api_key"]
+api_instance = sib_api_v3_sdk.EmailCampaignsApi(sib_api_v3_sdk.ApiClient(configuration))
 
 # ----------------------------
 # SMTP Configuration
 # ----------------------------
 smtp_server = "smtp-relay.brevo.com"
 smtp_port = 587
-sender_email = st.secrets["smtp"]["username"]
-sender_password = st.secrets["smtp"]["password"]
+sender_email = st.secrets["smtp"]["username"]  # Retrieve SMTP username from Streamlit secrets
+sender_password = st.secrets["smtp"]["password"]  # Retrieve SMTP password (Master Password) from Streamlit secrets
 
 # Configure the Gemini AI API key for proposal generation
 genai.configure(api_key=st.secrets["google"]["GOOGLE_API_KEY"])
@@ -39,6 +41,7 @@ def create_brevo_campaign():
     )
     
     try:
+        # Call the Brevo API to create the campaign
         api_response = api_instance.create_email_campaign(email_campaigns)
         pprint(api_response)
         return api_response
@@ -51,16 +54,18 @@ def create_brevo_campaign():
 # ----------------------------
 def send_email(to_email, subject, body):
     try:
+        # Create the email message
         msg = MIMEMultipart()
         msg['From'] = sender_email
         msg['To'] = to_email
         msg['Subject'] = subject
         msg.attach(MIMEText(body, 'plain'))
         
+        # Connect to SMTP server and send the email
         with smtplib.SMTP(smtp_server, smtp_port) as server:
-            server.set_debuglevel(1)
-            server.starttls()
-            server.login(sender_email, sender_password)
+            server.set_debuglevel(1)  # Enable debug level for detailed SMTP logs
+            server.starttls()  # Start TLS encryption
+            server.login(sender_email, sender_password)  # Login with credentials
             text = msg.as_string()
             response = server.sendmail(sender_email, to_email, text)
             st.write(f"Server Response: {response}")
@@ -75,6 +80,7 @@ def send_email(to_email, subject, body):
 # ----------------------------
 def generate_sales_proposal(customer_name, product_name, product_details, customer_needs):
     try:
+        # Define the prompt for the AI model to generate a proposal
         prompt = f"""
         Generate a personalized sales proposal for a customer named {customer_name}. 
         The product is {product_name}, and here are the details: {product_details}. 
@@ -82,6 +88,7 @@ def generate_sales_proposal(customer_name, product_name, product_details, custom
         The proposal should be professional, persuasive, and tailored to the customer's needs.
         """
 
+        # Use Gemini AI to generate the proposal text
         model = genai.GenerativeModel('gemini-1.5-flash')
         response = model.generate_content(prompt)
         
@@ -99,7 +106,9 @@ st.write("Upload a CSV file with customer details to generate and send personali
 # File upload for CSV
 uploaded_file = st.file_uploader("Upload your CSV file", type="csv")
 
+# Check if a file was uploaded
 if uploaded_file is not None:
+    # Read the CSV file into a DataFrame
     df = pd.read_csv(uploaded_file)
 
     # Display the uploaded data
@@ -124,7 +133,7 @@ if uploaded_file is not None:
             # Send the proposal via SMTP
             send_email(recipient_email, subject, proposal)
 
-    # Optionally, create a Brevo campaign
+    # Optionally, create a Brevo campaign (this step can be skipped or used to send marketing campaigns)
     create_brevo_campaign()
 
 else:
