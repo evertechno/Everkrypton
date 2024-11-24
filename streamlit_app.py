@@ -53,11 +53,11 @@ def create_brevo_campaign():
 # ----------------------------
 # Function to Send Email via SMTP
 # ----------------------------
-def send_email(to_email, subject, body):
+def send_email(from_name, to_email, subject, body):
     try:
         # Create the email message
         msg = MIMEMultipart()
-        msg['From'] = sender_email
+        msg['From'] = from_name
         msg['To'] = to_email
         msg['Subject'] = subject
         msg.attach(MIMEText(body, 'plain'))
@@ -77,26 +77,36 @@ def send_email(to_email, subject, body):
         st.error(f"Error sending email: {e}")
 
 # ----------------------------
-# Function to Generate Sales Proposal using AI
+# Function to Generate Personalized Sales Proposal using AI
 # ----------------------------
 def generate_sales_proposal(customer_name, product_name, product_details, customer_needs):
     try:
-        # Define the prompt for the AI model to generate a proposal
+        # Define the prompt for the AI model to generate personalized email content
         prompt = f"""
-        Generate a personalized sales proposal for a customer named {customer_name}. 
+        Generate a personalized sales email for a customer named {customer_name}. 
         The product is {product_name}, and here are the details: {product_details}. 
         The customer's needs are: {customer_needs}. 
-        The proposal should be professional, persuasive, and tailored to the customer's needs.
+        
+        Generate:
+        1. A personalized "From" name (e.g., From Name, Company).
+        2. A personalized "Subject" for the email.
+        3. A personalized email "Body" content that is professional and persuasive, addressing the customer's needs.
         """
 
-        # Use Gemini AI to generate the proposal text
+        # Use Gemini AI to generate personalized content
         model = genai.GenerativeModel('gemini-1.5-flash')
         response = model.generate_content(prompt)
         
-        return response.text
+        # Extract the generated "From" name, subject, and body from the response
+        generated_content = response.text.split("\n")
+        from_name = generated_content[0].strip() if len(generated_content) > 0 else "From Name"
+        subject = generated_content[1].strip() if len(generated_content) > 1 else "Subject Line"
+        body = "\n".join(generated_content[2:]).strip() if len(generated_content) > 2 else "Body content not generated"
+        
+        return from_name, subject, body
     except Exception as e:
         st.error(f"Error generating sales proposal: {e}")
-        return None
+        return None, None, None
 
 # ----------------------------
 # Streamlit App UI
@@ -125,14 +135,11 @@ if uploaded_file is not None:
         customer_needs = row['Customer Needs']
         
         # Generate the sales proposal using AI
-        proposal = generate_sales_proposal(customer_name, product_name, product_details, customer_needs)
+        from_name, subject, body = generate_sales_proposal(customer_name, product_name, product_details, customer_needs)
         
-        if proposal:
-            # Subject for the email
-            subject = f"Personalized Sales Proposal for {customer_name}"
-            
+        if from_name and subject and body:
             # Send the proposal via SMTP
-            send_email(recipient_email, subject, proposal)
+            send_email(from_name, recipient_email, subject, body)
 
     # Optionally, create a Brevo campaign (this step can be skipped or used to send marketing campaigns)
     create_brevo_campaign()
