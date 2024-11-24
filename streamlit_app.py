@@ -30,20 +30,19 @@ genai.configure(api_key=st.secrets["google"]["GOOGLE_API_KEY"])
 # Function to Create Brevo Campaign
 # ----------------------------
 def create_brevo_campaign():
-    # Use the correct 'type' parameter instead of 'campaign_type'
-    email_campaigns = sib_api_v3_sdk.CreateEmailCampaign(
-        name="Campaign sent via the API",
-        subject="My subject",
-        sender={"name": "From Name", "email": "myfromemail@mycompany.com"},
-        type="classic",  # Correct parameter name for campaign type
-        html_content="Congratulations! You successfully sent this example campaign via the Brevo API.",
-        recipients={"listIds": [2, 7]},  # List IDs to send to
-        scheduled_at="2024-12-01 00:00:01"  # Example of scheduling the campaign
-    )
-    
     try:
-        # Call the Brevo API to create the campaign
-        api_response = api_instance.create_email_campaign(email_campaigns)
+        # Updated: Check API documentation for valid parameters
+        campaign_data = {
+            "name": "Campaign sent via the API",
+            "subject": "My subject",
+            "sender": {"name": "From Name", "email": "myfromemail@mycompany.com"},
+            "html_content": "Congratulations! You successfully sent this example campaign via the Brevo API.",
+            "recipients": {"listIds": [2, 7]},  # List IDs to send to
+            "scheduled_at": "2024-12-01 00:00:01"  # Example of scheduling the campaign
+        }
+
+        # Create the email campaign using the Brevo API
+        api_response = api_instance.create_email_campaign(campaign_data)
         pprint(api_response)
         return api_response
     except Exception as e:
